@@ -1,0 +1,66 @@
+input lower(i32).
+input upper(i32).
+
+lower(278384).
+upper(824795).
+
+output try(i32).
+
+try(N) :- lower(N).
+try(N + 1) :- try(N), upper(U), N <= U.
+
+output digits(i32, i32, i32, i32, i32, i32).
+
+digits(A, B, C, D, E, F) :-
+  try(N),
+  A = N / 100000,
+  B = (N - (A * 100000)) / 10000,
+  C = (N - (A * 100000) - (B * 10000)) / 1000,
+  D = (N - (A * 100000) - (B * 10000) - (C * 1000)) / 100,
+  E = (N - (A * 100000) - (B * 10000) - (C * 1000) - (D * 100)) / 10,
+  F = (N - (A * 100000) - (B * 10000) - (C * 1000) - (D * 100) - (E * 10)).
+
+output valid(i32, i32, i32, i32, i32, i32).
+
+valid(A, A, C, D, E, F) :-
+  digits(A, A, C, D, E, F),
+  A <= C,
+  C <= D,
+  D <= E,
+  E <= F,
+  A != C.
+
+valid(A, B, B, D, E, F) :-
+  digits(A, B, B, D, E, F),
+  A <= B,
+  B <= D,
+  D <= E,
+  E <= F,
+  B != A,
+  B != D.
+
+valid(A, B, C, C, E, F) :-
+  digits(A, B, C, C, E, F),
+  A <= B,
+  B <= C,
+  C <= E,
+  E <= F,
+  C != B,
+  C != E.
+
+valid(A, B, C, D, D, F) :-
+  digits(A, B, C, D, D, F),
+  A <= B,
+  B <= C,
+  C <= D,
+  D <= F,
+  D != C,
+  D != F.
+
+valid(A, B, C, D, E, E) :-
+  digits(A, B, C, D, E, E),
+  A <= B,
+  B <= C,
+  C <= D,
+  D <= E,
+  E != D.

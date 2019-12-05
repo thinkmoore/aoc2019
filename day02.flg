@@ -1,0 +1,212 @@
+@external
+input day02(i32 list).
+
+type val =
+  | concrete(i32)
+  | symbolic(bv[32] smt)
+
+type state = {
+  memory : val list;
+  next : i32;
+}
+
+type inst =
+  | add(val,val,val)
+  | mul(val,val,val)
+  | halt
+
+fun coerce_symbolic(Val : val) : bv[32] smt =
+  match Val with
+  | concrete(X) => `X`
+  | symbolic(X) => `X`
+  end.
+
+fun symbolic_memory(Memory : i32 list) : val list =
+  match Memory with
+  | [] => []
+  | X :: XS => (if X >= 0 then concrete(X) else symbolic(`#{X}[bv[32]]`)) :: symbolic_memory(XS)
+  end.
+
+fun val_add(X : val, Y : val) : val =
+  match (X,Y) with
+  | (concrete(XC),concrete(YC)) => concrete(XC + YC)
+  | _ => let XS = coerce_symbolic(X) in
+         let YS = coerce_symbolic(Y) in
+         symbolic(`bv_add(XS, YS)`)
+  end.
+
+fun val_mul(X : val, Y : val) : val =
+  match (X,Y) with
+  | (concrete(XC),concrete(YC)) => concrete(XC * YC)
+  | _ => let XS = coerce_symbolic(X) in
+         let YS = coerce_symbolic(Y) in
+         symbolic(`bv_mul(XS, YS)`)
+  end.
+
+fun lookup(Xs : val list, N : i32) : val option =
+  match Xs with
+  | [] => none
+  | X :: Xs => if N = 0 then some(X) else lookup(Xs, N - 1)
+  end.
+
+fun update(Xs : val list, N : i32, V : val) : (val list) option =
+  match Xs with
+  | [] => none
+  | X :: Xs => if N = 0
+               then some(V :: Xs)
+               else (match update(Xs, N - 1, V) with
+                     | some(NewXs) => some(X :: NewXs)
+                     | none => none
+                     end)
+  end.
+
+fun decode_operands(State : state, PC : i32) : (val * val * val) option =
+  let Memory = memory(State) in
+  let Op1 = lookup(Memory, PC + 1) in
+  let Op2 = lookup(Memory, PC + 2) in
+  let Dst = lookup(Memory, PC + 3) in
+  match (Op1,Op2,Dst) with
+  | (some(Op1),some(Op2),some(Dst)) => some((Op1,Op2,Dst))
+  | _ => none
+  end.
+
+output reachable(state).
+
+output decode(state, inst).
+
+decode(State, Inst) :-
+  reachable(State),
+  Memory = memory(State),
+  Next = next(State),
+  some(X) = lookup(Memory,Next),
+  OpCode = coerce_symbolic(X),
+  is_sat(`OpCode #= 1`),
+  some((Op1,Op2,Dst)) = decode_operands(State, Next),
+  Inst = add(Op1, Op2, Dst).
+
+decode(State, Inst) :-
+  reachable(State),
+  Memory = memory(State),
+  Next = next(State),
+  some(X) = lookup(Memory,Next),
+  OpCode = coerce_symbolic(X),
+  is_sat(`OpCode #= 2`),
+  some((Op1,Op2,Dst)) = decode_operands(State, Next),
+  Inst = mul(Op1, Op2, Dst).
+
+decode(State, Inst) :-
+  reachable(State),
+  Memory = memory(State),
+  Next = next(State),
+  some(X) = lookup(Memory,Next),
+  OpCode = coerce_symbolic(X),
+  is_sat(`OpCode #= 99`),
+  Inst = halt.
+
+fun length(Xs : 'a list) : i32 =
+  match Xs with
+  | [] => 0
+  | _ :: Xs => 1 + length(Xs)
+  end.
+
+output valid_addr(state, i32).
+
+valid_addr(State,0) :-
+  reachable(State).
+valid_addr(State,N) :-
+  reachable(State),
+  valid_addr(State,C),
+  N = C + 1,
+  N < length(memory(State)).
+
+output parameter(state, val, i32).
+
+parameter(State, Op, N) :-
+  decode(State, add(Op,_,_)),
+  valid_addr(State,N),
+  O = coerce_symbolic(Op),
+  is_sat(`O #= N`).
+parameter(State, Op, N) :-
+  decode(State, add(_,Op,_)),
+  valid_addr(State,N),
+  O = coerce_symbolic(Op),
+  is_sat(`O #= N`).
+parameter(State, Op, N) :-
+  decode(State, add(_,_,Op)),
+  valid_addr(State,N),
+  O = coerce_symbolic(Op),
+  is_sat(`O #= N`).
+parameter(State, Op, N) :-
+  decode(State, mul(Op,_,_)),
+  valid_addr(State,N),
+  O = coerce_symbolic(Op),
+  is_sat(`O #= N`).
+parameter(State, Op, N) :-
+  decode(State, mul(_,Op,_)),
+  valid_addr(State,N),
+  O = coerce_symbolic(Op),
+  is_sat(`O #= N`).
+parameter(State, Op, N) :-
+  decode(State, mul(_,_,Op)),
+  valid_addr(State,N),
+  O = coerce_symbolic(Op),
+  is_sat(`O #= N`).
+
+output steps_to(state, state, i32).
+
+reachable(State) :-
+  steps_to(_, State, _).
+
+steps_to(State, State, 0) :-
+  day02(Memory),
+  SymMemory = symbolic_memory(Memory),
+  State = { memory = SymMemory; next = 0 }.
+
+steps_to(State, NewState, N + 1) :-
+  steps_to(State, PrevState, N),
+  decode(PrevState, add(Op1,Op2,Dst)),
+  parameter(PrevState, Op1, P1),
+  parameter(PrevState, Op2, P2),
+  parameter(PrevState, Dst, PD),
+  some(V1) = lookup(memory(PrevState),P1),
+  some(V2) = lookup(memory(PrevState),P2),
+  some(NewMemory) = update(memory(PrevState),PD,val_add(V1,V2)),
+  NewState = { memory = NewMemory; next = next(PrevState) + 4 }.
+
+steps_to(State, NewState, N + 1) :-
+  steps_to(State, PrevState, N),
+  decode(PrevState, mul(Op1,Op2,Dst)),
+  parameter(PrevState, Op1, P1),
+  parameter(PrevState, Op2, P2),
+  parameter(PrevState, Dst, PD),
+  some(V1) = lookup(memory(PrevState),P1),
+  some(V2) = lookup(memory(PrevState),P2),
+  some(NewMemory) = update(memory(PrevState),PD,val_mul(V1,V2)),
+  NewState = { memory = NewMemory; next = next(PrevState) + 4 }.
+
+output terminates(state, state, i32)
+
+terminates(Start, End, N) :-
+  steps_to(Start, End, N), 
+  decode(End, halt).
+
+output spec(state, state, i32, i32, i32).
+
+output targetValue(i32).
+targetValue(19690720).
+
+spec(Start, End, NounVal, VerbVal, Checksum) :-
+  targetValue(ResultVal),
+  terminates(Start, End, _),  
+  some(Result) = lookup(memory(End), 0),
+  some(Noun) = lookup(memory(Start), 1),
+  some(Verb) = lookup(memory(Start), 2),
+  ResultSym = coerce_symbolic(Result),
+  NounSym = coerce_symbolic(Noun),
+  VerbSym = coerce_symbolic(Verb),
+  N = #{"noun"}[bv[32]],
+  V = #{"verb"}[bv[32]],
+  some(M) = get_model(`ResultSym #= ResultVal /\ N #= NounSym /\ V #= VerbSym`, some(1000)),
+  some(NounVal) = query_model(N, M),
+  some(VerbVal) = query_model(V, M),
+  Checksum = 100 * NounVal + VerbVal.

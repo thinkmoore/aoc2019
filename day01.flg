@@ -1,0 +1,32 @@
+@external
+input day01(i32 list).
+
+modules(i32 list).
+
+modules(Ms) :- day01(Ms).
+
+fun fuelNeeded(M : i32) : i32 =
+  topup(M / 3 - 2)
+and topup(F : i32) : i32 =
+  if F < 6
+  then F
+  else F + fuelNeeded(F).
+
+fun mapFuelNeeded(Ms : i32 list) : i32 list =
+  match Ms with
+  | [] => []
+  | X :: Xs => fuelNeeded(X) :: mapFuelNeeded(Xs)
+  end.
+
+fun sum(Xs : i32 list, Acc : i32) : i32 =
+  match Xs with
+  | [] => Acc
+  | X :: Xs => sum(Xs, Acc + X)
+  end.
+
+output fuel(i32, i32 list).
+
+fuel(F,Modules) :-
+  modules(Modules),
+  FuelNeeds = mapFuelNeeded(Modules),
+  F = sum(FuelNeeds, 0).
