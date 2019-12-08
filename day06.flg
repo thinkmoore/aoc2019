@@ -1,0 +1,56 @@
+@external
+input orbit(string,string)
+
+output reachable(string,string)
+
+reachable(A,B) :-
+  orbit(A,B).
+
+reachable(A,C) :-
+  orbit(A,B),
+  reachable(B,C).
+
+output indirect(string,string).
+
+indirect(A,B) :-
+  reachable(A,B),
+  ! orbit(A,B).
+
+output transfer(string,string,string list)
+
+transfer(A,B,[B,A]) :-
+  orbit(A,B).
+
+transfer(A,B,[B,A]) :-
+  orbit(B,A).
+
+fun member(E : 'a, Xs : 'a list) : bool =
+  match Xs with
+  | [] => false
+  | X :: Xs => if E = X then true else member(E,Xs)
+  end.
+
+transfer(A,C,C :: Os) :-
+  transfer(A,B,Os),
+  orbit(B,C),
+  ! member(C,Os).
+
+transfer(A,C,C :: Os) :-
+  transfer(A,B,Os),
+  orbit(C,B),
+  ! member(C,Os).
+
+output santa_route(string list, i32).
+
+fun length(Xs : 'a list) : i32 =
+  match Xs with
+  | [] => 0
+  | _ :: Xs => 1 + length(Xs)
+  end.
+
+santa_route(Os,N) :-
+  transfer("YOU","SAN",Os),
+  N = length(Os) - 3,
+  N < 1000.
+
+:- santa_route(_Os,_N).
